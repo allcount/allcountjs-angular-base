@@ -657,7 +657,7 @@ allcountBaseModule.directive("lcForm", ["lcApi", "fieldRenderingService", "$pars
                     var forUpdate = {id: scope.entity.id};
                     for (var field in scope.entity) {
                         if (scope.entity.hasOwnProperty(field) && scope.isFieldChanged(field)) {
-                            forUpdate[field] = scope.entity[field] ? scope.entity[field] : null;
+                            forUpdate[field] = scope.entity[field] != null ? scope.entity[field] : null;
                         }
                     }
                     return forUpdate;
