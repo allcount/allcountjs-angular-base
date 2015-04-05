@@ -139,6 +139,10 @@ allcountBaseModule.factory("lcApi", ["$http", "$q", function ($http, $q) {
         return $http.get("/api/menus").then(getJson);
     };
 
+    service.messages = function () {
+        return $http.get("/api/messages").then(getJson);
+    };
+
     service.appInfo = function () {
         return $http.get("/api/app-info").then(getJson);
     };
@@ -310,7 +314,7 @@ function listDirective(directiveName, templateUrl) {
                         scope.entityCrudId = {entityTypeId: entityTypeId};
                     else
                         scope.entityCrudId = entityTypeId;
-                    rest.getFieldDescriptions(scope.entityCrudId, true, function (descriptions) {
+                    var fdPromise = rest.getFieldDescriptions(scope.entityCrudId, true, function (descriptions) {
                         scope.fieldDescriptions = descriptions;
                         scope.fieldRenderer = {};
                         $(descriptions).each(function (index, desc) {
@@ -319,9 +323,11 @@ function listDirective(directiveName, templateUrl) {
                     });
 
                     scope.permissions = {};
-                    rest.permissions(scope.entityCrudId, function (permissions) {
+                    var permissionsPromise = rest.permissions(scope.entityCrudId, function (permissions) {
                         scope.permissions = permissions;
                     });
+
+                    var updateGridPromise;
 
                     scope.updateGrid = function () {
                         if (!scope.paging) return;
@@ -333,7 +339,7 @@ function listDirective(directiveName, templateUrl) {
                             if (scope.paging.count === 0) {
                                 scope.items = [];
                             } else {
-                                rest.findRange(scope.entityCrudId , scope.filtering, scope.paging.start, scope.paging.count, function (items) {
+                                updateGridPromise = rest.findRange(scope.entityCrudId , scope.filtering, scope.paging.start, scope.paging.count, function (items) {
                                     scope.infiniteScrollEnd = false;
                                     scope.items = items
                                 })
@@ -343,7 +349,7 @@ function listDirective(directiveName, templateUrl) {
 
                     scope.infiniteScrollLoadNextItems = function () {
                         if (!scope.items) {
-                            return $q.when(null);
+                            return $q.all([fdPromise, permissionsPromise, updateGridPromise]);
                         }
                         return rest.findRange(scope.entityCrudId , scope.filtering, scope.paging.start + scope.items.length, scope.paging.count).then(function (items) {
                             if (!items.length) {
@@ -523,9 +529,13 @@ allcountBaseModule.provider('fieldRenderingService', function () {
     }];
 });
 
-allcountBaseModule.factory("messages", [function () {
-    return function (msg) { //TODO
-        return msg;
+allcountBaseModule.factory("messages", ['lcApi', function (lcApi) {
+    var messagesObj = {};
+    lcApi.messages().then(function (messages) {
+        messagesObj = messages;
+    });
+    return function (msg) {
+        return messagesObj[msg] || msg;
     };
 }]);
 
@@ -596,7 +606,7 @@ function fieldDirective(directiveName) {
 }
 allcountBaseModule.directive("lcField", fieldDirective("lcField"));
 
-allcountBaseModule.directive("lcForm", ["lcApi", "fieldRenderingService", "$parse", function (rest, fieldRenderingService, $parse) {
+allcountBaseModule.directive("lcForm", ["lcApi", "fieldRenderingService", "$parse", "$q", function (lcApi, fieldRenderingService, $parse, $q) {
     return {
         restrict: 'A',
         scope: true,
@@ -616,7 +626,7 @@ allcountBaseModule.directive("lcForm", ["lcApi", "fieldRenderingService", "$pars
                         scope.entity = {}; //TODO should be filled by entity or template
                         var entityId = scope.$parent.$eval(attrs.entityId);
                         if (!entityId) return;
-                        rest.readEntity(scope.entityCrudId, entityId, function (entity) {
+                        return lcApi.readEntity(scope.entityCrudId, entityId, function (entity) {
                             scope.entity = entity;
                             scope.originalEntity = angular.copy(entity);
                             if (successCallback) successCallback();
@@ -634,21 +644,21 @@ allcountBaseModule.directive("lcForm", ["lcApi", "fieldRenderingService", "$pars
                 }, true);
 
                 scope.createEntity = function (successCallback) {
-                    return rest.createEntity(scope.entityCrudId, scope.entity).then(function () {
+                    return lcApi.createEntity(scope.entityCrudId, scope.entity).then(function () {
                         scope.validationErrors = undefined;
                         successCallback && successCallback();
                     }, handleValidationErrorsCallback(scope))
                 };
 
                 scope.updateEntity = function (successCallback) {
-                    return rest.updateEntity(scope.entityCrudId, scope.entityForUpdate()).then(function () { //TODO send only difference with original entity
+                    return lcApi.updateEntity(scope.entityCrudId, scope.entityForUpdate()).then(function () { //TODO send only difference with original entity
                         scope.validationErrors = undefined;
                         if (successCallback) successCallback();
                     }, handleValidationErrorsCallback(scope))
                 };
 
                 scope.deleteEntity = function (successCallback) {
-                    return rest.deleteEntity(scope.entityCrudId, scope.entity.id).then(function () {
+                    return lcApi.deleteEntity(scope.entityCrudId, scope.entity.id).then(function () {
                         if (successCallback) successCallback();
                     });
                 };
@@ -679,7 +689,7 @@ allcountBaseModule.directive("lcForm", ["lcApi", "fieldRenderingService", "$pars
                     })
                 }
 
-                rest.getFieldDescriptions(scope.entityCrudId, false, function (descriptions) { //TODO doubling
+                var fdPromise = lcApi.getFieldDescriptions(scope.entityCrudId, false, function (descriptions) { //TODO doubling
                     scope.fieldDescriptions = descriptions;
                     scope.fieldRenderer = {};
                     scope.fieldToDesc = {};
@@ -693,7 +703,12 @@ allcountBaseModule.directive("lcForm", ["lcApi", "fieldRenderingService", "$pars
                     return scope.fieldToDesc && scope.fieldToDesc[field] && !scope.fieldToDesc[field].fieldType.removeFormLabel;
                 };
 
-                scope.reloadEntity();
+                scope.formLoading = true;
+                $q.all([fdPromise, scope.reloadEntity()]).then(function () {
+                    scope.formLoading = false;
+                }, function () {
+                    scope.formLoading = false;
+                });
             });
 
             attrs.isEditor && scope.$parent.$watch(attrs.isEditor, function (isEditor) {
@@ -723,3 +738,28 @@ function messageDirective(directiveName) {
 }
 
 allcountBaseModule.directive("lcMessage", messageDirective("lcMessage"));
+
+allcountBaseModule.factory("appInfo", ['lcApi', '$q', function (lcApi, $q) {
+    var appInfoObj;
+    var appInfoPromise = lcApi.appInfo().then(function (appInfo) {
+        appInfoObj = appInfo;
+        return appInfo;
+    });
+    return {
+        appName: function () {
+            return appInfoObj ? $q.when(appInfoObj.appName) : appInfoPromise.then(function (o) { return o.appName });
+        }
+    }
+}]);
+
+allcountBaseModule.directive("lcAppName", ["appInfo", function (appInfo) {
+    return {
+        restrict: 'C',
+        scope: false,
+        link: function (scope, element, attrs) {
+            appInfo.appName().then(function (appName) {
+                $(element).text(appName);
+            });
+        }
+    }
+}]);
