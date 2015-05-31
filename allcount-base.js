@@ -20,11 +20,8 @@ allcountBaseModule.factory("lcApi", ["$http", "$q", function ($http, $q) {
             return;
         }
         var httpPromise = $http.get(entityUrl(castToEntityCrudId(entityCrudId), "/field-descriptions", {isGrid: isGrid})).then(getJson).then(function (descriptions) {
-            return $(descriptions).map(function (index, item) {
-                if (!isGrid || !item.hideInGrid) {
-                    return item;
-                }
-                return undefined;
+            return _.filter(descriptions, function (item) {
+                return !isGrid || !item.hideInGrid;
             })
         });
 
@@ -317,7 +314,7 @@ function listDirective(directiveName, templateUrl) {
                     var fdPromise = rest.getFieldDescriptions(scope.entityCrudId, true, function (descriptions) {
                         scope.fieldDescriptions = descriptions;
                         scope.fieldRenderer = {};
-                        $(descriptions).each(function (index, desc) {
+                        _.forEach(descriptions, function (desc) {
                             scope.fieldRenderer[desc.field] = fieldRenderingService.readOnlyFieldRenderer(desc);
                         })
                     });
@@ -693,7 +690,7 @@ allcountBaseModule.directive("lcForm", ["lcApi", "fieldRenderingService", "$pars
                     scope.fieldDescriptions = descriptions;
                     scope.fieldRenderer = {};
                     scope.fieldToDesc = {};
-                    $(descriptions).each(function (index, desc) {
+                    _.forEach(descriptions, function (desc) {
                         scope.fieldRenderer[desc.field] = fieldRenderingService.readOnlyFieldRenderer(desc);
                         scope.fieldToDesc[desc.field] = desc;
                     })
