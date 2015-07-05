@@ -25,5 +25,9 @@
     "angular-i18n": "1.3.6",
     "underscore": "1.8.2",
     "jquery": ">=1.7"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/allcount/allcountjs-angular-base.git"
   }
 }
