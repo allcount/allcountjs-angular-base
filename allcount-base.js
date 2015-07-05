@@ -526,14 +526,21 @@ allcountBaseModule.provider('fieldRenderingService', function () {
     }];
 });
 
-allcountBaseModule.factory("messages", ['lcApi', function (lcApi) {
+allcountBaseModule.factory("messages", ['lcApi', '$q', function (lcApi, $q) {
     var messagesObj = {};
-    lcApi.messages().then(function (messages) {
+    var promise = lcApi.messages().then(function (messages) {
         messagesObj = messages;
+        promise = $q.when(null);
     });
-    return function (msg) {
+    var messages = function (msg) {
         return messagesObj[msg] || msg;
     };
+    messages.messagePromise = function (msg) {
+        return promise.then(function () {
+            return messages(msg);
+        })
+    };
+    return messages;
 }]);
 
 function fieldDirective(directiveName) {
@@ -727,7 +734,9 @@ function messageDirective(directiveName) {
             scope: false,
             link: function (scope, element, attrs) {
                 attrs.$observe(directiveName, function (messageValue) {
-                    $(element).text(messages(messageValue));
+                    messages.messagePromise(messageValue).then(function (msg) {
+                        $(element).text(msg);
+                    });
                 });
             }
         }
