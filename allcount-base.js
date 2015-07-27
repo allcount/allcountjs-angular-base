@@ -571,7 +571,16 @@ function fieldDirective(directiveName) {
                     })
                 }
 
-                function renderField(fieldDescription, isEditor) {
+                function callReadOnly(fieldDescription, entity, isEditor) {
+                    var expression = fieldDescription.isReadOnlyExpression;
+                    if (expression && entity && isEditor) {
+                        var entityCopy = JSON.parse(JSON.stringify(entity));
+                        return !eval("(" + expression+ ")(entityCopy)");
+                    }
+                    return undefined;
+                }
+
+                function renderField(fieldDescription, isEditor, entity) {
                     if (!fieldDescription || fieldRenderingService.readOnlyFieldRenderer(fieldDescription) === false && fieldScope) {
                         if (fieldScope) {
                             fieldScope.isEditor = isEditor;
@@ -580,7 +589,9 @@ function fieldDirective(directiveName) {
                     }
                     if (fieldScope) fieldScope.$destroy();
                     if (!fieldDescription) return;
-                    isEditor = fieldDescription.isReadOnly ? false : isEditor;
+                    var readOnlyExp = callReadOnly(fieldDescription, entity, isEditor);
+                    isEditor = readOnlyExp != undefined ? readOnlyExp : (fieldDescription.isReadOnly ? false : isEditor);
+
                     fieldScope = scope.$new();
                     if (isEditor || fieldRenderingService.readOnlyFieldRenderer(fieldDescription) === false) {
                         fieldScope.isEditor = isEditor;
@@ -599,10 +610,12 @@ function fieldDirective(directiveName) {
                 }
 
                 scope.$watch(attrs.isEditor, function (isEditor) {
-                    renderField(scope.$eval(attrs[directiveName]), isEditor);
+                    var entity = scope.entity || scope.$eval("item");
+                    renderField(scope.$eval(attrs[directiveName]), isEditor, entity);
                 });
                 scope.$watch(attrs[directiveName], function (fd) {
-                    renderField(fd, scope.$eval(attrs.isEditor));
+                    var entity = scope.entity;
+                    renderField(fd, scope.$eval(attrs.isEditor), entity);
                 })
             }
         }
