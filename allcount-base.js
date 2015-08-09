@@ -4,226 +4,243 @@ allcountBaseModule.factory('track', function () { //TODO
     return function (e) { console.log(e) };
 });
 
-allcountBaseModule.factory("lcApi", ["$http", "$q", function ($http, $q) {
-    var service = {};
-
-    function castToEntityCrudId(entityCrudId) {
-        if (typeof entityCrudId == "string") {
-            return {entityTypeId: entityCrudId};
-        } else {
-            return entityCrudId;
-        }
-    }
-
-    service.getFieldDescriptions = function (entityCrudId, isGrid, successCallback) {
-        if (!entityCrudId) {
-            return;
-        }
-        var httpPromise = $http.get(entityUrl(castToEntityCrudId(entityCrudId), "/field-descriptions", {isGrid: isGrid})).then(getJson).then(function (descriptions) {
-            return _.filter(descriptions, function (item) {
-                return !isGrid || !item.hideInGrid;
-            })
-        });
-
-        if (successCallback) {
-            httpPromise.then(successCallback);
-        }
-        return httpPromise;
+allcountBaseModule.provider("lcApi", function () {
+    var lcApiDescriptionCaching = false;
+    this.setDescriptionCaching = function (caching) {
+        lcApiDescriptionCaching = caching;
     };
+    this.$get = ["$http", "$q", function ($http, $q) {
+        var service = {};
 
-    service.permissions = function (entityCrudId, successCallback) {
-        if (!entityCrudId) {
-            return;
-        }
-        return promiseWithCallback(
-            $http.get(entityUrl(entityCrudId, "/permissions")),
-            successCallback
-        );
-    };
-
-    service.layout = function (entityTypeId, successCallback) {
-        if (!entityTypeId) {
-            return;
-        }
-        return promiseWithCallback(
-            $http.get(entityUrl({entityTypeId: entityTypeId}, '/layout')),
-            successCallback
-        );
-    };
-
-    service.entityDescription = function (entityTypeId, successCallback) {
-        if (!entityTypeId) {
-            return;
-        }
-        return promiseWithCallback(
-            $http.get(entityUrl(castToEntityCrudId(entityTypeId), '/entity-description')),
-            successCallback
-        );
-    };
-
-    service.findAll = function (entityCrudId, successCallback) {
-        if (!entityCrudId) {
-            return;
-        }
-        return promiseWithCallback(
-            $http.get(entityUrl(entityCrudId)),
-            successCallback
-        );
-    };
-
-    function trimFiltering(filtering) { //TODO should be trimmed in control
-        if (!filtering) return filtering;
-        filtering = angular.copy(filtering);
-        filtering.textSearch = filtering.textSearch && filtering.textSearch.length > 0 ? filtering.textSearch : undefined;
-        return filtering;
-    }
-
-    service.findRange = function (entityCrudId, filtering, start, count, successCallback) {
-        if (!entityCrudId) {
-            return;
-        }
-        return promiseWithCallback($http.get(entityUrl(entityCrudId, '', {start: start, count: count, filtering: trimFiltering(filtering)})), successCallback);
-    };
-
-    service.findCount = function (entityCrudId, filtering, successCallback) {
-        if (!entityCrudId) {
-            return;
-        }
-        return promiseWithCallback($http.get(entityUrl(entityCrudId, '/count', {filtering: trimFiltering(filtering)})), successCallback);
-    };
-
-    service.createEntity = function (entityCrudId, entity, successCallback) {
-        if (!entityCrudId) {
-            return;
-        }
-        return promiseWithCallback(
-            $http.post(entityUrl(entityCrudId), entity),
-            successCallback
-        );
-    };
-
-    service.readEntity = function (entityCrudId, entityId, successCallback) {
-        if (!entityCrudId) {
-            return;
-        }
-        return promiseWithCallback(
-            $http.get(entityUrl(entityCrudId, '/' +entityId)),
-            successCallback
-        );
-    };
-
-    service.updateEntity = function (entityCrudId, entity, successCallback) {
-        if (!entityCrudId) {
-            return;
-        }
-        return promiseWithCallback(
-            $http.put(entityUrl(castToEntityCrudId(entityCrudId)), entity),
-            successCallback
-        );
-    };
-
-    service.deleteEntity = function (entityCrudId, entityId, successCallback) {
-        if (!entityCrudId) {
-            return;
-        }
-        return promiseWithCallback(
-            $http.delete(entityUrl(entityCrudId, '/' + entityId)),
-            successCallback
-        )
-    };
-
-    service.menus = function () {
-        return $http.get("/api/menus").then(getJson);
-    };
-
-    service.messages = function () {
-        return $http.get("/api/messages").then(getJson);
-    };
-
-    service.appInfo = function () {
-        return $http.get("/api/app-info").then(getJson);
-    };
-
-    service.actions = function (entityCrudId, actionTarget) {
-        return $http.get(entityUrl(entityCrudId, '/actions', {actionTarget: actionTarget})).then(getJson);
-    };
-
-    service.performAction = function (entityCrudId, actionId, selectedItemIds) {
-        return $http.post(entityUrl(entityCrudId, '/actions/' + actionId), {selectedItemIds: selectedItemIds}).then(getJson);
-    };
-
-    function entityUrl(entityCrudId, suffix, paramsToEncode) {
-        var url;
-        suffix = suffix || '';
-        if (entityCrudId.entityTypeId && _.size(entityCrudId) === 1) {
-            url = '/api/entity/' + entityCrudId.entityTypeId + suffix;
-        } else {
-            url = '/api/entity/crud' + suffix;
-            paramsToEncode = paramsToEncode || {};
-            paramsToEncode.entityCrudId = entityCrudId;
-        }
-        var query = _.chain(paramsToEncode).map(function (value, property) {
-            if (_.isObject(value)) {
-                value = JSON.stringify(value);
+        function castToEntityCrudId(entityCrudId) {
+            if (typeof entityCrudId == "string") {
+                return {entityTypeId: entityCrudId};
+            } else {
+                return entityCrudId;
             }
-            return value != null && (property + "=" + value) || undefined;
-        }).filter(_.identity).value().join('&');
-        return url + (query.length ? ('?' + query) : '');
-    }
-
-    function promiseWithCallback(promise, successCallback) {
-        if (successCallback) {
-            promise.success(successCallback);
         }
-        return promise.then(getJson);
-    }
 
-    function getJson(resp) {
-        return resp.data;
-    }
-
-    service.referenceValueCache = {};
-
-    service.referenceValues = function (entityTypeId, successCallback) {
-        if (!entityTypeId) {
-            return;
-        }
-        var promise;
-        if (service.referenceValueCache[entityTypeId]) {
-            promise = $q.when(service.referenceValueCache[entityTypeId]);
-        }
-        else {
-            promise = $http.get("/api/entity/" + entityTypeId + '/reference-values').then(getJson).then(function (referenceValues) {
-                service.referenceValueCache[entityTypeId] = [{id: undefined, name: ""}].concat(referenceValues);
-                return service.referenceValueCache[entityTypeId];
+        service.getFieldDescriptions = function (entityCrudId, isGrid, successCallback) {
+            if (!entityCrudId) {
+                return;
+            }
+            var httpPromise = $http.get(entityUrl(castToEntityCrudId(entityCrudId), "/field-descriptions", {isGrid: isGrid}), {cache: lcApiDescriptionCaching}).then(getJson).then(function (descriptions) {
+                return _.filter(descriptions, function (item) {
+                    return !isGrid || !item.hideInGrid;
+                })
             });
+
+            if (successCallback) {
+                httpPromise.then(successCallback);
+            }
+            return httpPromise;
+        };
+
+        service.permissions = function (entityCrudId, successCallback) {
+            if (!entityCrudId) {
+                return;
+            }
+            return promiseWithCallback(
+                $http.get(entityUrl(entityCrudId, "/permissions"), {cache: lcApiDescriptionCaching}),
+                successCallback
+            );
+        };
+
+        service.layout = function (entityTypeId, successCallback) {
+            if (!entityTypeId) {
+                return;
+            }
+            return promiseWithCallback(
+                $http.get(entityUrl({entityTypeId: entityTypeId}, '/layout'), {cache: lcApiDescriptionCaching}),
+                successCallback
+            );
+        };
+
+        service.entityDescription = function (entityTypeId, successCallback) {
+            if (!entityTypeId) {
+                return;
+            }
+            return promiseWithCallback(
+                $http.get(entityUrl(castToEntityCrudId(entityTypeId), '/entity-description'), {cache: lcApiDescriptionCaching}),
+                successCallback
+            );
+        };
+
+        service.findAll = function (entityCrudId, successCallback) {
+            if (!entityCrudId) {
+                return;
+            }
+            return promiseWithCallback(
+                $http.get(entityUrl(entityCrudId)),
+                successCallback
+            );
+        };
+
+        function trimFiltering(filtering) { //TODO should be trimmed in control
+            if (!filtering) return filtering;
+            filtering = angular.copy(filtering);
+            filtering.textSearch = filtering.textSearch && filtering.textSearch.length > 0 ? filtering.textSearch : undefined;
+            return filtering;
         }
-        if (successCallback) {
-            promise.then(successCallback);
+
+        service.findRange = function (entityCrudId, filtering, start, count, successCallback) {
+            if (!entityCrudId) {
+                return;
+            }
+            return promiseWithCallback($http.get(entityUrl(entityCrudId, '', {
+                start: start,
+                count: count,
+                filtering: trimFiltering(filtering)
+            })), successCallback);
+        };
+
+        service.findCount = function (entityCrudId, filtering, successCallback) {
+            if (!entityCrudId) {
+                return;
+            }
+            return promiseWithCallback($http.get(entityUrl(entityCrudId, '/count', {filtering: trimFiltering(filtering)})), successCallback);
+        };
+
+        service.createEntity = function (entityCrudId, entity, successCallback) {
+            if (!entityCrudId) {
+                return;
+            }
+            return promiseWithCallback(
+                $http.post(entityUrl(entityCrudId), entity),
+                successCallback
+            );
+        };
+
+        service.readEntity = function (entityCrudId, entityId, successCallback) {
+            if (!entityCrudId) {
+                return;
+            }
+            return promiseWithCallback(
+                $http.get(entityUrl(entityCrudId, '/' + entityId)),
+                successCallback
+            );
+        };
+
+        service.updateEntity = function (entityCrudId, entity, successCallback) {
+            if (!entityCrudId) {
+                return;
+            }
+            return promiseWithCallback(
+                $http.put(entityUrl(castToEntityCrudId(entityCrudId)), entity),
+                successCallback
+            );
+        };
+
+        service.deleteEntity = function (entityCrudId, entityId, successCallback) {
+            if (!entityCrudId) {
+                return;
+            }
+            return promiseWithCallback(
+                $http.delete(entityUrl(entityCrudId, '/' + entityId)),
+                successCallback
+            )
+        };
+
+        service.menus = function () {
+            return $http.get("/api/menus").then(getJson);
+        };
+
+        service.messages = function () {
+            return $http.get("/api/messages").then(getJson);
+        };
+
+        service.appInfo = function () {
+            return $http.get("/api/app-info").then(getJson);
+        };
+
+        service.actions = function (entityCrudId, actionTarget) {
+            return $http.get(entityUrl(entityCrudId, '/actions', {actionTarget: actionTarget})).then(getJson);
+        };
+
+        service.performAction = function (entityCrudId, actionId, selectedItemIds) {
+            return $http.post(entityUrl(entityCrudId, '/actions/' + actionId), {selectedItemIds: selectedItemIds}).then(getJson);
+        };
+
+        function entityUrl(entityCrudId, suffix, paramsToEncode) {
+            var url;
+            suffix = suffix || '';
+            if (entityCrudId.entityTypeId && _.size(entityCrudId) === 1) {
+                url = '/api/entity/' + entityCrudId.entityTypeId + suffix;
+            } else {
+                url = '/api/entity/crud' + suffix;
+                paramsToEncode = paramsToEncode || {};
+                paramsToEncode.entityCrudId = entityCrudId;
+            }
+            var query = _.chain(paramsToEncode).map(function (value, property) {
+                if (_.isObject(value)) {
+                    value = JSON.stringify(value);
+                }
+                return value != null && (property + "=" + value) || undefined;
+            }).filter(_.identity).value().join('&');
+            return url + (query.length ? ('?' + query) : '');
         }
-        return promise;
-    };
 
-    service.referenceValueByEntityId = function (entityTypeId, entityId) {
-        return $http.get("/api/entity/" + entityTypeId + "/reference-values/" + entityId).then(getJson);
-    };
+        service.entityUrl = entityUrl;
 
-    service.signUp = function (username, password) {
-        return $http.post('/api/sign-up', {username: username, password: password});
-    };
+        function promiseWithCallback(promise, successCallback) {
+            if (successCallback) {
+                promise.success && promise.success(successCallback) || promise.then(successCallback);
+            }
+            return promise.then(getJson);
+        }
 
-    service.signIn = function (username, password) {
-        return $http.post('/api/sign-in', {username: username, password: password}).then(getJson).then(function (resp) {
-            localStorage.allcountToken = resp.token;
-        });
-    };
+        service.promiseWithCallback = promiseWithCallback;
 
-    service.signOut = function () {
-        localStorage.allcountToken = undefined;
-    };
+        function getJson(resp) {
+            return resp.data;
+        }
 
-    return service;
-}]);
+        service.referenceValueCache = {};
+
+        service.referenceValues = function (entityTypeId, successCallback) {
+            if (!entityTypeId) {
+                return;
+            }
+            var promise;
+            if (service.referenceValueCache[entityTypeId]) {
+                promise = $q.when(service.referenceValueCache[entityTypeId]);
+            }
+            else {
+                promise = $http.get("/api/entity/" + entityTypeId + '/reference-values').then(getJson).then(function (referenceValues) {
+                    service.referenceValueCache[entityTypeId] = [{id: undefined, name: ""}].concat(referenceValues);
+                    return service.referenceValueCache[entityTypeId];
+                });
+            }
+            if (successCallback) {
+                promise.then(successCallback);
+            }
+            return promise;
+        };
+
+        service.referenceValueByEntityId = function (entityTypeId, entityId) {
+            return $http.get("/api/entity/" + entityTypeId + "/reference-values/" + entityId).then(getJson);
+        };
+
+        service.signUp = function (username, password) {
+            return $http.post('/api/sign-up', {username: username, password: password});
+        };
+
+        service.signIn = function (username, password) {
+            return $http.post('/api/sign-in', {
+                username: username,
+                password: password
+            }).then(getJson).then(function (resp) {
+                localStorage.allcountToken = resp.token;
+            });
+        };
+
+        service.signOut = function () {
+            localStorage.allcountToken = undefined;
+        };
+
+        return service;
+    }]
+});
 
 allcountBaseModule.directive("lcMenu", menuDirective());
 function menuDirective() {
