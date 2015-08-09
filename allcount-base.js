@@ -365,6 +365,9 @@ function listDirective(directiveName, templateUrl) {
                         if (!scope.items) {
                             return $q.all([fdPromise, permissionsPromise, updateGridPromise]);
                         }
+                        if (scope.infiniteScrollEnd) {
+                            return $q.when(null);
+                        }
                         return rest.findRange(scope.entityCrudId , scope.filtering, scope.paging.start + scope.items.length, scope.paging.count).then(function (items) {
                             if (!items.length) {
                                 scope.infiniteScrollEnd = true;
