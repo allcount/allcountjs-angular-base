@@ -353,8 +353,9 @@ function listDirective(directiveName, templateUrl) {
                             if (scope.paging.count === 0) {
                                 scope.items = [];
                             } else {
-                                updateGridPromise = rest.findRange(scope.entityCrudId , scope.filtering, scope.paging.start, scope.paging.count, function (items) {
-                                    scope.infiniteScrollEnd = false;
+                                var count = scope.paging.count;
+                                updateGridPromise = rest.findRange(scope.entityCrudId , scope.filtering, scope.paging.start, count, function (items) {
+                                    scope.infiniteScrollEnd = items.length < count;
                                     scope.items = items
                                 })
                             }
