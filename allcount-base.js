@@ -669,9 +669,10 @@ allcountBaseModule.directive("lcForm", ["lcApi", "fieldRenderingService", "$pars
                 }, true);
 
                 scope.createEntity = function (successCallback) {
-                    return lcApi.createEntity(scope.entityCrudId, scope.entity).then(function () {
+                    return lcApi.createEntity(scope.entityCrudId, scope.entity).then(function (entityId) {
                         scope.validationErrors = undefined;
-                        successCallback && successCallback();
+                        successCallback && successCallback(entityId);
+                        return entityId;
                     }, handleValidationErrorsCallback(scope))
                 };
 
