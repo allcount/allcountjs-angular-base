@@ -552,6 +552,9 @@ allcountBaseModule.factory("messages", ['lcApi', '$q', function (lcApi, $q) {
     var promise = lcApi.messages().then(function (messages) {
         messagesObj = messages;
         promise = $q.when(null);
+    }, function (err) {
+        promise = $q.when(null);
+        console.error(err);
     });
     var messages = function (msg) {
         return messagesObj[msg] || msg;
