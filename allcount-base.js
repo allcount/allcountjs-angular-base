@@ -289,9 +289,12 @@ function listDirective(directiveName, templateUrl) {
             templateUrl: templateUrl,
             scope: true,
             link: function (scope, element, attrs, ctrl) {
+                scope.editingItem = null;
                 scope.messages = messages;
                 scope.atomicCounter = 0;
                 scope.filtering = {};
+                scope.items = [];
+                scope.updateGrid = null;
                 if (attrs.publishMethods) {
                     var publishMethodsTo = $parse(attrs.publishMethods);
                     publishMethodsTo.assign(scope.$parent, {
@@ -640,6 +643,7 @@ allcountBaseModule.directive("lcForm", ["lcApi", "fieldRenderingService", "$pars
         scope: true,
         link: function (scope, element, attrs) {
             scope.entity = {}; //TODO should be filled by entity or template
+            scope.isEditor = false;
             scope.$watch(attrs.lcForm, function (entityTypeId) {
                 if (typeof entityTypeId == "string") {
                     scope.entityCrudId = {entityTypeId: entityTypeId};
