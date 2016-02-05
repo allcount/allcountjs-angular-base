@@ -798,3 +798,10 @@ allcountBaseModule.directive("lcAppName", ["appInfo", function (appInfo) {
         }
     }
 }]);
+
+if (typeof exports !== 'undefined') {
+    exports.listDirective = listDirective;
+    exports.fieldDirective = fieldDirective;
+    exports.messageDirective = messageDirective;
+    exports.menuDirective = menuDirective;
+}
