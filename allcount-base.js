@@ -153,8 +153,8 @@ allcountBaseModule.provider("lcApi", function () {
             return $http.get("/api/app-info").then(getJson);
         };
 
-        service.actions = function (entityCrudId, actionTarget) {
-            return $http.get(entityUrl(entityCrudId, '/actions', {actionTarget: actionTarget})).then(getJson);
+        service.actions = function (entityCrudId, actionTarget, selectedItemIds) {
+            return $http.post(entityUrl(entityCrudId, '/actions', {actionTarget: actionTarget, selectedItemIds : selectedItemIds})).then(getJson);
         };
 
         service.performAction = function (entityCrudId, actionId, selectedItemIds) {
